@@ -8,6 +8,7 @@ separate file based swagger definitions to one huge swagger file.
 ## Run
 > java -jar ~/.m2/repository/org/matrix/swagger/matrix-swagger-tools/1.0-SNAPSHOT/matrix-swagger-tools-1.0-SNAPSHOT-jar-with-dependencies.jar
 
+```
 Usage: Tool [options] [command] [command options]
   Commands:
     toYaml      Convert file to yaml
@@ -63,5 +64,4 @@ Usage: Tool [options] [command] [command options]
           -v, -d, --verbose, --debug
             Debug/verbose mode
             Default: false
-
-
+```
