@@ -1,10 +1,11 @@
 # matrix-swagger-tools
-##Swagger tools for matrix messaging system - maybe useful also for others
+**Swagger tools for matrix messaging system - maybe useful also for others.**
 Tools for converting files From/To Yaml and JSON formats and tools for merging
 separate file based swagger definitions to one huge swagger file.
 
 ## Build
 > mvn clean install
+
 ## Run
 > java -jar ~/.m2/repository/org/matrix/swagger/matrix-swagger-tools/1.0-SNAPSHOT/matrix-swagger-tools-1.0-SNAPSHOT-jar-with-dependencies.jar
 
