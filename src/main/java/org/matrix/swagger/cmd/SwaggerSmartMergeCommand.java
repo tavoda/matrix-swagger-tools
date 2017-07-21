@@ -18,7 +18,10 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Predicate;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Created by tavoda on 7/6/17.
@@ -36,8 +39,27 @@ public class SwaggerSmartMergeCommand extends ExecutableCommand {
 	@Parameter(names = {"-o", "--output-file"}, description = "Output file, if not specified calculated automatically")
 	String outputFile = "/tmp/output.json";
 
+	@Parameter(names = {"-c", "--client-version"}, description = "Client API version (used in URL)")
+	String clientVersion = "/r0";
+
+	@Parameter(names = {"-s", "--schemes"}, description = "Replace schemes in API (example: '-s http,https')")
+	String schemesReplace;
+	String[] schemesReplaceParsed;
+
+	@Parameter(names = {"-t", "--host"}, description = "Replace host in API (example: '-h localhost:8080')")
+	String hostReplace;
+
+	@Parameter(names = {"-b", "--base-path"}, description = "Replace base path in API (example: '-b /_matrix/client')")
+	String basePath;
+
 	@Override
 	public void execute() throws IOException {
+		// Align parameters
+		clientVersion = (clientVersion.startsWith("/") ? "" : "/") + clientVersion + (clientVersion.endsWith("/") ? "" : "/");
+		if (schemesReplace != null) {
+			schemesReplaceParsed = schemesReplace.split("[,]");
+		}
+
 		List<String> realFiles = new ArrayList<>();
 		for (String inputFile : inputFiles) {
 			File realFile = new File(inputFile);
@@ -92,12 +114,40 @@ public class SwaggerSmartMergeCommand extends ExecutableCommand {
 						}
 					}
 				}
+				// Align basePath
+				if (parsedFile.containsKey("basePath") && parsedFile.containsKey("paths")) {
+					String currBasePath = (String) parsedFile.get("basePath");
+					parsedFile.put("basePath", basePath);
+					currBasePath = currBasePath.replace("%CLIENT_MAJOR_VERSION%", clientVersion);
+
+					Map<String, Object> paths = (Map<String, Object>) parsedFile.get("paths");
+					List<String> keys = new ArrayList(paths.keySet());
+					for (String path : keys) {
+						Object removed = paths.remove(path);
+						String newPath = (currBasePath + path).replaceAll("///", "/").replaceAll("//", "/");
+						if (newPath.startsWith(basePath)) {
+							paths.put(newPath.substring(basePath.length()), removed);
+						} else {
+							log.warn("Path {} doesn't start with specified basePath={}", newPath, basePath);
+							paths.put(newPath, removed);
+						}
+					}
+				}
+				// Replace host
+				if (hostReplace != null && parsedFile.containsKey("host")) {
+					parsedFile.put("host", hostReplace);
+				}
+				// Replace schemes
+				if (schemesReplaceParsed != null && parsedFile.containsKey("schemes")) {
+					parsedFile.put("schemes", schemesReplaceParsed);
+				}
+
 				if (parsedFile.containsKey("swagger")) {
 					deepMapCopy("> ", parsedFile, result);
 				} else {
 					// Prepare definitionName
-					String definitionName = file.getName();
-					definitionName = definitionName.endsWith(".yaml") ? definitionName.substring(0, definitionName.length() - 5) : definitionName;
+					String definitionName = normalizeRef(file.getName());
+
 					// Prepare parsedFile
 					int rootIndex = file.getCanonicalPath().indexOf("/matrix-doc/");
 					rootIndex = rootIndex == -1 ? 0 : rootIndex + 1;
@@ -133,6 +183,8 @@ public class SwaggerSmartMergeCommand extends ExecutableCommand {
 			if (!to.containsKey(entry.getKey())) {
 				log.info("{}Puting new value in key '{}'", prefix, entry.getKey());
 				to.put(entry.getKey(), entry.getValue());
+			} else if (entry.getValue().getClass().isArray()) {
+//				log.error("Recursive ARRAY COPY {}", entry.getKey());
 			} else if (entry.getValue() instanceof Collection) {
 //				log.error("Recursive LIST COPY {}", entry.getKey());
 			} else if (entry.getValue() instanceof Map && to.get(entry.getKey()) instanceof Map) {
@@ -184,7 +236,7 @@ public class SwaggerSmartMergeCommand extends ExecutableCommand {
 				String ref = (String) entry.getValue();
 				int slashIndex = ref.lastIndexOf('/');
 				String newRef = slashIndex == -1 ? ref : ref.substring(slashIndex + 1);
-				newRef = "#/definitions/" + (newRef.endsWith(".yaml") ? newRef.substring(0, newRef.length() - 5) : newRef);
+				newRef = "#/definitions/" + normalizeRef (newRef);
 				log.info("REF: {} -> {}", ref, newRef);
 				entry.setValue(newRef);
 			} else if (entry.getValue() instanceof Map) {
@@ -198,6 +250,24 @@ public class SwaggerSmartMergeCommand extends ExecutableCommand {
 				});
 			}
 		}
+	}
+
+	private String normalizeRef(String definitionName) {
+		definitionName = definitionName.endsWith(".yaml") ? definitionName.substring(0, definitionName.length() - 5) : definitionName;
+		StringBuilder normalizedName = new StringBuilder();
+		int startIndex = 0;
+		Pattern specialChars = Pattern.compile("[._#]");
+		Matcher matcher = specialChars.matcher(definitionName);
+		while (startIndex < definitionName.length()) {
+			int dotIndex = matcher.find(startIndex) ? matcher.start() : definitionName.length();
+			normalizedName.append(definitionName.substring(startIndex, startIndex + 1).toUpperCase());
+			startIndex++;
+			if (startIndex < dotIndex) {
+				normalizedName.append(definitionName.substring(startIndex, dotIndex));
+			}
+			startIndex = dotIndex + 1;
+		}
+		return normalizedName.toString();
 	}
 
 	@Override
