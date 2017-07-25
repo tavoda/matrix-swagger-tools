@@ -104,6 +104,9 @@ public class SwaggerSmartMergeCommand extends ExecutableCommand {
 			if (parsedFile != null) {
 				log.info("Processing file {}", file.getPath());
 				List<String> refs = getRefs(parsedFile);
+				if (parsedFile.containsKey("x-include")) {
+					parsedFile.remove("x-include");
+				}
 				for (String ref : refs) {
 					if (!ref.startsWith("#")) {
 						String newFile = file.getAbsoluteFile().getParent() + "/" + ref;
